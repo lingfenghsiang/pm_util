@@ -1,0 +1,6 @@
+.vscode
+build
+tmp.txt
+pmm_stat.txt
+*.log
+*.out
