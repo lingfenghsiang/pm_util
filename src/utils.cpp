@@ -131,7 +131,8 @@ util::PmmDataCollector::PmmDataCollector(const std::string name, float *real_imc
     dimm_info_ = NULL;
 }
 
-util::PmmDataCollector::PmmDataCollector(const std::string name, std::vector<util::DimmObj> *dimms){
+util::PmmDataCollector::PmmDataCollector(const std::string name, std::vector<util::DimmObj> *dimms)
+{
     start = new PMMData;
     end = new PMMData;
     start_timer = std::chrono::system_clock::now();
@@ -168,10 +169,13 @@ util::PmmDataCollector::~PmmDataCollector()
 
     setlocale(LC_NUMERIC, "");
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_timer - start_timer);
-    std::cerr << "-------------------------------------------------------------------------" << std::endl;
-    fprintf(stderr, "elapsed time: %'.2f sec\n", duration.count() / 1000.0);
-    std::cerr << "-------------------------------------------------------------------------" << std::endl;
-    std::cerr << "|DIMM\t|RA\t|WA\t|iMC Rd(MB)\t|Media Rd(MB)\t|iMC Wr(MB)\t|Media Wr(MB)\t|" << std::endl;
+    if (print_flag_)
+    {
+        std::cerr << "-------------------------------------------------------------------------" << std::endl;
+        fprintf(stderr, "elapsed time: %'.2f sec\n", duration.count() / 1000.0);
+        std::cerr << "-------------------------------------------------------------------------" << std::endl;
+        std::cerr << "|DIMM\t|RA\t|WA\t|iMC Rd(MB)\t|Media Rd(MB)\t|iMC Wr(MB)\t|Media Wr(MB)\t|" << std::endl;
+    }
     if (dimm_info_)
     {
         dimm_info_->resize(dimm_num);
@@ -209,32 +213,135 @@ util::PmmDataCollector::~PmmDataCollector()
         *outer_media_read_addr_ = media_read_size_MB;
     if (outer_media_write_addr_)
         *outer_media_write_addr_ = media_write_size_MB;
-    for (int i = 0; i < dimm_num; i++)
+    if (print_flag_)
     {
-        std::cerr << "|0x" << start->pmm_dimms_.at(i).dimm_id_ << "\t";
-        // printf("|%s\t", start->pmm_dimms_.at(i).dimm_id_);
-        if ((TotalMediaReads_.at(i) / TotalReadRequests_.at(i)) > 5)
-            fprintf(stderr, "|N/A\t");
-        else
-            fprintf(stderr, "|%'.2f\t", TotalMediaReads_.at(i) / TotalReadRequests_.at(i));
-        if ((TotalMediaWrites_.at(i) / TotalWriteRequests_.at(i)) > 5)
-            fprintf(stderr, "|N/A\t");
-        else
-            fprintf(stderr, "|%'.2f\t", TotalMediaWrites_.at(i) / TotalWriteRequests_.at(i));
-        fprintf(stderr, "|%'8.2f\t", TotalReadRequests_.at(i));
-        fprintf(stderr, "|%'8.2f\t", TotalMediaReads_.at(i));
-        fprintf(stderr, "|%'8.2f\t", TotalWriteRequests_.at(i));
-        fprintf(stderr, "|%'8.2f\t|\n", TotalMediaWrites_.at(i));
+        for (int i = 0; i < dimm_num; i++)
+        {
+            std::cerr << "|0x" << start->pmm_dimms_.at(i).dimm_id_ << "\t";
+            // printf("|%s\t", start->pmm_dimms_.at(i).dimm_id_);
+            if ((TotalMediaReads_.at(i) / TotalReadRequests_.at(i)) > 5)
+                fprintf(stderr, "|N/A\t");
+            else
+                fprintf(stderr, "|%'.2f\t", TotalMediaReads_.at(i) / TotalReadRequests_.at(i));
+            if ((TotalMediaWrites_.at(i) / TotalWriteRequests_.at(i)) > 5)
+                fprintf(stderr, "|N/A\t");
+            else
+                fprintf(stderr, "|%'.2f\t", TotalMediaWrites_.at(i) / TotalWriteRequests_.at(i));
+            fprintf(stderr, "|%'8.2f\t", TotalReadRequests_.at(i));
+            fprintf(stderr, "|%'8.2f\t", TotalMediaReads_.at(i));
+            fprintf(stderr, "|%'8.2f\t", TotalWriteRequests_.at(i));
+            fprintf(stderr, "|%'8.2f\t|\n", TotalMediaWrites_.at(i));
+        }
+
+        std::cerr << "\033[32m"
+                  << "Total RA:" << media_read_size_MB / imc_read_size_MB << ", iMC read "
+                  << imc_read_size_MB << "MB, media read " << media_read_size_MB << "MB"
+                  << "\033[0m" << std::endl;
+        std::cerr << "\033[31m"
+                  << "Total WA:" << media_write_size_MB / imc_write_size_MB << ", iMC write "
+                  << imc_write_size_MB << "MB, media write " << media_write_size_MB << "MB"
+                  << "\033[0m" << std::endl;
     }
 
-    std::cerr << "\033[32m"
-              << "Total RA:" << media_read_size_MB / imc_read_size_MB << ", iMC read "
-              << imc_read_size_MB << "MB, media read " << media_read_size_MB << "MB"
-              << "\033[0m" << std::endl;
-    std::cerr << "\033[31m"
-              << "Total WA:" << media_write_size_MB / imc_write_size_MB << ", iMC write "
-              << imc_write_size_MB << "MB, media write " << media_write_size_MB << "MB"
-              << "\033[0m" << std::endl;
     delete start;
     delete end;
+}
+
+void util::PmmDataCollector::DisablePrint(void)
+{
+    print_flag_ = false;
+}
+
+// show progress
+util::ProgressShow::ProgressShow(std::atomic<uint64_t> *progress, uint64_t total_amount)
+{
+    array_lock_.lock();
+    progress_array_.push_back(progress);
+    array_lock_.unlock();
+    total_wss_ = total_amount;
+
+    background_runner = std::thread{
+        [&]()
+        {
+            while (1)
+            {
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+                uint64_t progress = 0;
+                array_lock_.lock();
+                for (auto i : progress_array_)
+                {
+                    progress += (*i).load();
+                }
+                array_lock_.unlock();
+                if ((progress * 100 / total_wss_) > 100)
+                    break;
+                OutPutSingleProgress(progress * 100 / total_wss_);
+                if (stop_flag == 1)
+                    break;
+            }
+        }};
+}
+
+util::ProgressShow::ProgressShow(uint64_t total_amount)
+{
+    total_wss_ = total_amount;
+
+    background_runner = std::thread{
+        [&]()
+        {
+            while (1)
+            {
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+                uint64_t progress = 0;
+                array_lock_.lock();
+                for (auto i : progress_array_)
+                {
+                    progress += (*i).load();
+                }
+                array_lock_.unlock();
+                if ((progress * 100 / total_wss_) > 100)
+                    break;
+                OutPutSingleProgress(progress * 100 / total_wss_);
+                if (stop_flag == 1)
+                    break;
+            }
+        }};
+}
+
+void util::ProgressShow::ProgressAppend(std::atomic<uint64_t> *progress)
+{
+    array_lock_.lock();
+    progress_array_.push_back(progress);
+    array_lock_.unlock();
+}
+
+util::ProgressShow::ProgressShow()
+{
+    // progress_ = nullptr;
+    std::cout << "no proper input" << std::endl;
+}
+util::ProgressShow::~ProgressShow()
+{
+    stop_flag = 1;
+    background_runner.join();
+    std::cout << std::endl;
+}
+
+inline void util::ProgressShow::OutPutSingleProgress(int progress)
+{
+    assert(progress >= 0 && progress <= 100);
+    std::cerr << std::flush << "\r[";
+    for (int i = 0; i < progress; i++)
+    {
+        std::cerr << "=";
+    }
+    std::cerr << "=>";
+    for (int i = 0; i < 100 - progress; i++)
+    {
+        std::cerr << " ";
+    }
+
+    std::cerr << "] ";
+    std::cerr << progress << "%";
+    std::cerr << std::flush;
 }

@@ -41,9 +41,11 @@ namespace util
                              float *real_media_read, float *real_media_write);
             PmmDataCollector(const std::string name, std::vector<DimmObj> *dimms);
             ~PmmDataCollector();
+            void DisablePrint(void);
 
         private:
             PMMData *start, *end;
+            bool print_flag_ = true;
 
             std::chrono::_V2::system_clock::time_point start_timer, end_timer;
             float *outer_imc_read_addr_ = nullptr, *outer_imc_write_addr_ = nullptr,
@@ -54,5 +56,22 @@ namespace util
     void ShowReadAmp(PMMData start, PMMData end);
 
     void ShowWriteAmp(PMMData start, PMMData end);
+
+    class ProgressShow
+    {
+    public:
+        std::vector<std::atomic<uint64_t> *> progress_array_;
+        uint64_t total_wss_;
+        std::thread background_runner;
+        std::mutex array_lock_;
+        int stop_flag = 0;
+
+        ProgressShow(std::atomic<uint64_t> *progress, uint64_t total_amount);
+        ProgressShow(uint64_t total_amount);
+        ProgressShow();
+        ~ProgressShow();
+        inline void OutPutSingleProgress(int progress);
+        void ProgressAppend(std::atomic<uint64_t> *progress);
+    };
 
 } // namespace util
