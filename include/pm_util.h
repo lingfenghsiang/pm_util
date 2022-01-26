@@ -44,7 +44,7 @@ namespace util
             void DisablePrint(void);
 
         private:
-            PMMData *start, *end;
+            PMMData start, end;
             bool print_flag_ = true;
 
             std::chrono::_V2::system_clock::time_point start_timer, end_timer;
