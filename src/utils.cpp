@@ -7,6 +7,8 @@
 #include <sstream>
 #include <vector>
 #include <chrono>
+#include <signal.h>
+#include <unistd.h>
 
 #include "../include/pm_util.h"
 
@@ -29,7 +31,7 @@ void util::PMMData::get_pmm_data()
 
     system("ipmctl show -performance > pmm_stat.txt");
     std::ifstream ipmctl_stat;
-    ipmctl_stat.open("pmm_stat.txt"); //open the input file
+    ipmctl_stat.open("pmm_stat.txt"); // open the input file
 
     std::vector<std::string> reg_init_set = {
         R"(DimmID=0x([0-9a-f]*))",
@@ -333,4 +335,40 @@ inline void util::ProgressShow::OutPutSingleProgress(int progress)
     std::cerr << "] ";
     std::cerr << progress << "%";
     std::cerr << std::flush;
+}
+
+void util::debug_perf_ppid(void)
+{
+    const pid_t ppid = getppid();
+    char tmp[1024];
+    sprintf(tmp, "/proc/%d/cmdline", ppid);
+    FILE *const fc = fopen(tmp, "r");
+    const size_t nr = fread(tmp, 1, 1020, fc);
+    fclose(fc);
+    // look for "perf record"
+    if (nr < 11)
+        return;
+    tmp[nr] = '\0';
+    for (size_t i = 0; i < nr; i++)
+    {
+        if (tmp[i] == 0)
+            tmp[i] = ' ';
+    }
+    char *const perf = strstr(tmp, "perf record");
+    if (perf == NULL)
+        return;
+    // it should be
+    __perf_pid = ppid;
+}
+
+void util::debug_perf_switch(void)
+{
+    if (__perf_pid > 0)
+        kill(__perf_pid, SIGUSR2);
+}
+
+void util::debug_perf_stop(void)
+{
+    if (__perf_pid > 0)
+        kill(__perf_pid, SIGINT);
 }

@@ -74,4 +74,9 @@ namespace util
         void ProgressAppend(std::atomic<uint64_t> *progress);
     };
 
+    static pid_t __perf_pid = 0;
+    void debug_perf_ppid(void);
+    void debug_perf_switch(void);
+    void debug_perf_stop(void);
+
 } // namespace util
