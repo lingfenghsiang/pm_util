@@ -139,6 +139,7 @@ util::PmmDataCollector::PmmDataCollector(const std::string name, std::vector<uti
 };
 
 // For details, please refer to "IPMWatch_Overview.pdf" mannual in VTune profiling kits by Intel.
+// https://github.com/intel/intel-pmwatch/blob/master/docs/PMWatch_User_Guide.pdf
 
 // read_64B_ops_received :
 // write_64B_ops_received:
